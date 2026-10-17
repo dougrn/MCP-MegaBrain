@@ -23,7 +23,7 @@ db = MegaBrainDB()
 
 
 @server.tool()
-def brain_consult(context: str, project: str = "global") -> str:
+def brain_consult(context: str = "", project: str = "global") -> str:
     """
     MANDATORY PRE-FLIGHT CHECK: Call this before writing, designing, or refactoring code.
     Returns:
@@ -33,10 +33,27 @@ def brain_consult(context: str, project: str = "global") -> str:
     - Golden Patterns (verified working code snippets to use directly)
 
     Args:
-        context: The topic, stack, or task description (e.g., 'php mysql pdo', 'react button design', 'authentication')
+        context: The topic, stack, or task description (e.g., 'php mysql pdo', 'react button design', 'authentication'). Leave empty or 'all' to load everything.
         project: Project name/slug or 'global'
     """
     result = db.consult(context_query=context, project=project)
+    return result.formatted_prompt
+
+
+@server.tool()
+def brain_load_project(project: str = "global") -> str:
+    """
+    LOAD COMPLETE BRAIN KNOWLEDGE: Call this whenever the user says:
+    - 'leia todas as regras do projeto'
+    - 'carregue as regras do MegaBrain'
+    - 'load all project rules'
+    - 'what are the rules for this project?'
+    Returns all active rules, mandatory specifications, anti-patterns, and golden patterns for the project.
+
+    Args:
+        project: Project identifier (e.g., 'ldg', 'ecommerce', or 'global')
+    """
+    result = db.consult(context_query="all", project=project)
     return result.formatted_prompt
 
 

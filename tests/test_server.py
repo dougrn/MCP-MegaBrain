@@ -16,13 +16,11 @@ from megabrain.server import (
 
 
 @pytest.fixture(autouse=True)
-def clean_database():
-    """Ensure a clean test state before each test."""
-    with db.get_connection() as conn:
-        conn.execute("DELETE FROM rules;")
-        conn.execute("DELETE FROM mandatory_specs;")
-        conn.execute("DELETE FROM experiences;")
-        conn.execute("DELETE FROM golden_patterns;")
+def isolated_test_db(monkeypatch, tmp_path):
+    """Ensure tests run against an isolated temporary database."""
+    from megabrain.db import MegaBrainDB
+    test_db = MegaBrainDB(tmp_path / "test.db")
+    monkeypatch.setattr("megabrain.server.db", test_db)
     yield
 
 

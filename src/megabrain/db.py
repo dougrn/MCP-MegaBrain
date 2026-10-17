@@ -531,34 +531,42 @@ class MegaBrainDB:
     # Main Consultation Logic
     # ==========================
 
-    def consult(self, context_query: str, project: str = "global") -> ConsultationResult:
+    def consult(self, context_query: str = "", project: str = "global") -> ConsultationResult:
         """
         Synthesize rules, mandatory specs, anti-patterns, and golden patterns
         for a task context into an actionable, authoritative guardrail prompt.
+        If context_query is empty, 'all', or wildcard, returns all knowledge for the project.
         """
         p = project.strip().lower() if project else "global"
         rules = self.list_rules(p)
-
-        # Match specs against context keywords
         all_specs = self.list_specs(p)
-        matched_specs = []
-        ctx_lower = context_query.lower()
-        for spec in all_specs:
-            triggers = [t.strip().lower() for t in spec.trigger_pattern.split(",") if t.strip()]
-            for trig in triggers:
-                if trig in ctx_lower:
-                    matched_specs.append(spec)
-                    break
 
-        experiences = self.search_experiences(context_query, project=p, limit=4)
-        patterns = self.search_golden_patterns(context_query, project=p, limit=2)
+        ctx_clean = context_query.strip().lower() if context_query else ""
+        is_dump_all = ctx_clean in ("", "*", "all", "tudo", "regras", "rules")
+
+        if is_dump_all:
+            matched_specs = all_specs
+            experiences = self.list_experiences(p)
+            patterns = self.list_golden_patterns(p)
+        else:
+            # Match specs against context keywords
+            matched_specs = []
+            for spec in all_specs:
+                triggers = [t.strip().lower() for t in spec.trigger_pattern.split(",") if t.strip()]
+                for trig in triggers:
+                    if trig in ctx_clean:
+                        matched_specs.append(spec)
+                        break
+
+            experiences = self.search_experiences(context_query, project=p, limit=4)
+            patterns = self.search_golden_patterns(context_query, project=p, limit=2)
 
         # Build prompt
-        formatted_prompt = self._format_prompt(p, context_query, rules, matched_specs, experiences, patterns)
+        formatted_prompt = self._format_prompt(p, context_query or "all", rules, matched_specs, experiences, patterns)
 
         return ConsultationResult(
             project=p,
-            context_query=context_query,
+            context_query=context_query or "all",
             rules=rules,
             mandatory_specs=matched_specs,
             golden_patterns=patterns,
