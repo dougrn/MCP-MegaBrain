@@ -73,7 +73,7 @@ Instead of letting the AI hallucinate boilerplates from average internet tokens,
 
 ```powershell
 # 1. Clone the repository
-git clone https://github.com/your-username/MCP-MegaBrain.git
+git clone https://github.com/dougrn/MCP-MegaBrain.git
 cd MCP-MegaBrain
 
 # 2. Sync dependencies with uv
