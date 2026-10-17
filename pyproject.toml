@@ -1,0 +1,41 @@
+[project]
+name = "megabrain"
+version = "0.1.0"
+description = "Persistent cross-agent memory, rule enforcer, and blindspot vaccine for AI coding assistants via Model Context Protocol (MCP)."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Douglas", email = "douglasnvg@gmail.com" }
+]
+requires-python = ">=3.10"
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "agentic-ai",
+    "llm-memory",
+    "vibecoding",
+    "guardrails",
+    "llama-cpp",
+    "antigravity",
+    "claude",
+    "cline"
+]
+dependencies = [
+    "mcp>=1.2.0",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+megabrain = "megabrain.cli:main"
+megabrain-server = "megabrain.server:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]

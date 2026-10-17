@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "megabrain": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "C:\\Users\\dougl\\Desktop\\Serviços\\_Pessoais\\MCP-MegaBrain",
+        "megabrain-server"
+      ]
+    }
+  }
+}
