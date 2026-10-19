@@ -178,6 +178,33 @@ def cmd_list(args):
         console.print(f"[red]Unknown list type: {target}. Use 'rules', 'specs', 'experiences', or 'patterns'.[/red]")
 
 
+def cmd_delete(args):
+    """Delete an item by type and ID."""
+    target = args.type.lower()
+    item_id = args.id
+
+    if target in ("rules", "rule", "r"):
+        success = db.delete_rule(item_id)
+        name = "Rule"
+    elif target in ("specs", "spec", "s", "mandatory_spec", "mandatory_specs"):
+        success = db.delete_spec(item_id)
+        name = "Prerequisite Spec"
+    elif target in ("experiences", "exp", "e", "traps", "trap", "experience"):
+        success = db.delete_experience(item_id)
+        name = "Experience"
+    elif target in ("patterns", "pat", "p", "golden", "pattern", "golden_pattern", "golden_patterns"):
+        success = db.delete_golden_pattern(item_id)
+        name = "Golden Pattern"
+    else:
+        console.print(f"[red]Unknown type: {target}. Use 'rules', 'specs', 'experiences', or 'patterns'.[/red]")
+        return
+
+    if success:
+        console.print(f"[bold green]✔ {name} #{item_id} deleted successfully.[/bold green]")
+    else:
+        console.print(f"[bold red]✖ {name} #{item_id} not found.[/bold red]")
+
+
 def cmd_contract(args):
     """Print the Agent Contract text for easy copy-pasting."""
     if args.raw:
@@ -249,6 +276,24 @@ def main():
     p_list.add_argument("type", choices=["rules", "specs", "experiences", "patterns"], help="Item type to list")
     p_list.add_argument("--project", "-p", default="all", help="Filter by project or 'all'")
     p_list.set_defaults(func=cmd_list)
+
+    # delete
+    p_delete = subparsers.add_parser(
+        "delete",
+        aliases=["rm", "remove"],
+        help="Delete a stored item by type and ID",
+    )
+    p_delete.add_argument(
+        "type",
+        choices=[
+            "rules", "specs", "experiences", "patterns",
+            "rule", "spec", "experience", "pattern",
+            "exp", "trap", "traps", "r", "s", "p", "e",
+        ],
+        help="Item type to delete",
+    )
+    p_delete.add_argument("id", type=int, help="ID of the item to delete")
+    p_delete.set_defaults(func=cmd_delete)
 
     # contract
     p_contract = subparsers.add_parser("contract", help="Output agent contract prompt instructions")

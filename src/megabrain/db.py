@@ -16,6 +16,30 @@ from megabrain.models import (
 )
 
 
+# Common noise words in English and Portuguese to filter from FTS queries
+STOPWORDS = {
+    # English
+    "a", "an", "the", "and", "or", "but", "if", "then", "else", "when", "at", "by",
+    "for", "with", "about", "against", "between", "into", "through", "during", "before",
+    "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off",
+    "over", "under", "again", "further", "once", "here", "there", "all", "any",
+    "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not",
+    "only", "own", "same", "so", "than", "too", "very", "can", "will", "just", "should",
+    "now", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "doing", "how", "what", "why", "where", "which", "who", "whom",
+    "this", "that", "these", "those", "am",
+    # Portuguese
+    "de", "a", "o", "que", "e", "do", "da", "em", "um", "para", "com", "nao", "não",
+    "uma", "os", "no", "se", "na", "por", "mais", "as", "dos", "como", "mas", "ao",
+    "ele", "das", "seu", "sua", "ou", "quando", "muito", "nos", "ja", "já", "eu",
+    "tambem", "também", "so", "só", "pelo", "pela", "ate", "até", "isso", "ela",
+    "entre", "depois", "sem", "mesmo", "aos", "seus", "quem", "nas", "me", "esse",
+    "eles", "voce", "você", "essa", "num", "nem", "suas", "meu", "minha", "onde",
+    "numa", "pelas", "elas", "qual", "pelos", "nós", "lhe", "deles", "essas", "esses",
+    "este", "dele", "tu", "te", "voces", "vocês", "lhes", "meus", "minhas",
+}
+
+
 class MegaBrainDB:
     """Encapsulates all SQLite storage, FTS5 indexing, and consultation logic."""
 
@@ -429,15 +453,19 @@ class MegaBrainDB:
     # ==========================
 
     def _sanitize_fts_query(self, query: str) -> str:
-        """Clean and extract alphanumeric search tokens for FTS5."""
-        tokens = re.findall(r"\w+", query)
+        """Clean and extract meaningful alphanumeric search tokens for FTS5, filtering stopwords."""
+        raw_tokens = re.findall(r"\w+", query)
+        if not raw_tokens:
+            return ""
+        # Filter out stopwords and 1-letter noise tokens
+        meaningful = [t for t in raw_tokens if len(t) > 1 and t.lower() not in STOPWORDS]
+        tokens = meaningful if meaningful else [t for t in raw_tokens if len(t) > 1]
         if not tokens:
             return ""
-        # Match tokens using OR or NEAR
         return " OR ".join(tokens)
 
     def search_experiences(self, query: str, project: str = "global", limit: int = 5) -> list[Experience]:
-        """Search experiences using FTS5 with fallback to LIKE."""
+        """Search experiences using FTS5 with column weights, project affinity, and adaptive relevance filtering."""
         p = project.strip().lower() if project else "global"
         fts_query = self._sanitize_fts_query(query)
         if not fts_query:
@@ -445,24 +473,38 @@ class MegaBrainDB:
 
         with self.get_connection() as conn:
             try:
+                # Column weights: context (10.0), what_failed (2.0), fix_applied (0.5)
+                # Prioritize project-specific matches over global ones
                 rows = conn.execute(
                     """
-                    SELECT e.* FROM experiences e
+                    SELECT e.*, bm25(experiences_fts, 10.0, 2.0, 0.5) as rank
+                    FROM experiences e
                     JOIN experiences_fts fts ON e.id = fts.rowid
                     WHERE experiences_fts MATCH ?
                       AND (e.project = ? OR e.project = 'global')
-                    ORDER BY bm25(experiences_fts) ASC, e.recurrence_count DESC
+                    ORDER BY 
+                        CASE WHEN e.project = ? THEN 0 ELSE 1 END ASC,
+                        rank ASC,
+                        e.recurrence_count DESC
                     LIMIT ?
                     """,
-                    (fts_query, p, limit),
+                    (fts_query, p, p, limit * 2),
                 ).fetchall()
                 if rows:
-                    return [Experience(**dict(r)) for r in rows]
+                    best_rank = rows[0]["rank"]
+                    # Adaptive cutoff: filter out noise matches (rank close to 0 or much worse than top match)
+                    threshold = min(-0.4, best_rank * 0.3) if best_rank < -1.0 else best_rank * 0.6
+                    filtered = [Experience(**dict(r)) for r in rows if r["rank"] <= threshold][:limit]
+                    if filtered:
+                        return filtered
+                    return [Experience(**dict(rows[0]))]
             except sqlite3.OperationalError:
                 pass
 
             # Fallback to LIKE if FTS query syntax error
-            tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2]
+            tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2 and t.lower() not in STOPWORDS]
+            if not tokens:
+                tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2]
             if not tokens:
                 return []
             clauses = ["(context LIKE ? OR what_failed LIKE ? OR fix_applied LIKE ?)" for _ in tokens]
@@ -470,20 +512,23 @@ class MegaBrainDB:
             for t in tokens:
                 params.extend([f"%{t}%", f"%{t}%", f"%{t}%"])
             params.append(p)
+            params.append(p)
             params.append(limit)
 
             sql = f"""
                 SELECT * FROM experiences
                 WHERE ({" OR ".join(clauses)})
                   AND (project = ? OR project = 'global')
-                ORDER BY recurrence_count DESC
+                ORDER BY 
+                    CASE WHEN project = ? THEN 0 ELSE 1 END ASC,
+                    recurrence_count DESC
                 LIMIT ?
             """
             rows = conn.execute(sql, params).fetchall()
             return [Experience(**dict(r)) for r in rows]
 
     def search_golden_patterns(self, query: str, project: str = "global", limit: int = 3) -> list[GoldenPattern]:
-        """Search golden patterns using FTS5."""
+        """Search golden patterns using weighted FTS5 and project affinity."""
         p = project.strip().lower() if project else "global"
         fts_query = self._sanitize_fts_query(query)
         if not fts_query:
@@ -491,24 +536,35 @@ class MegaBrainDB:
 
         with self.get_connection() as conn:
             try:
+                # Column weights: context (10.0), title (5.0), explanation (1.0)
                 rows = conn.execute(
                     """
-                    SELECT gp.* FROM golden_patterns gp
+                    SELECT gp.*, bm25(golden_patterns_fts, 10.0, 5.0, 1.0) as rank
+                    FROM golden_patterns gp
                     JOIN golden_patterns_fts fts ON gp.id = fts.rowid
                     WHERE golden_patterns_fts MATCH ?
                       AND (gp.project = ? OR gp.project = 'global')
-                    ORDER BY bm25(golden_patterns_fts) ASC
+                    ORDER BY 
+                        CASE WHEN gp.project = ? THEN 0 ELSE 1 END ASC,
+                        rank ASC
                     LIMIT ?
                     """,
-                    (fts_query, p, limit),
+                    (fts_query, p, p, limit * 2),
                 ).fetchall()
                 if rows:
-                    return [GoldenPattern(**dict(r)) for r in rows]
+                    best_rank = rows[0]["rank"]
+                    threshold = min(-0.4, best_rank * 0.3) if best_rank < -1.0 else best_rank * 0.6
+                    filtered = [GoldenPattern(**dict(r)) for r in rows if r["rank"] <= threshold][:limit]
+                    if filtered:
+                        return filtered
+                    return [GoldenPattern(**dict(rows[0]))]
             except sqlite3.OperationalError:
                 pass
 
             # Fallback
-            tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2]
+            tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2 and t.lower() not in STOPWORDS]
+            if not tokens:
+                tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 2]
             if not tokens:
                 return []
             clauses = ["(context LIKE ? OR title LIKE ? OR explanation LIKE ?)" for _ in tokens]
@@ -516,12 +572,15 @@ class MegaBrainDB:
             for t in tokens:
                 params.extend([f"%{t}%", f"%{t}%", f"%{t}%"])
             params.append(p)
+            params.append(p)
             params.append(limit)
 
             sql = f"""
                 SELECT * FROM golden_patterns
                 WHERE ({" OR ".join(clauses)})
                   AND (project = ? OR project = 'global')
+                ORDER BY 
+                    CASE WHEN project = ? THEN 0 ELSE 1 END ASC
                 LIMIT ?
             """
             rows = conn.execute(sql, params).fetchall()

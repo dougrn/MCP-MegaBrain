@@ -178,6 +178,101 @@ def brain_record_golden_pattern(
 
 
 @server.tool()
+def brain_delete_record(item_type: str, item_id: int) -> str:
+    """
+    Delete a stored memory record by its type and ID.
+
+    Args:
+        item_type: Type of item to delete: 'rule', 'spec', 'experience', or 'pattern'
+        item_id: The integer ID of the record to delete
+    """
+    target = item_type.strip().lower()
+    if target in ("rule", "rules", "r"):
+        success = db.delete_rule(item_id)
+        label = "Rule"
+    elif target in ("spec", "specs", "s", "mandatory_spec", "mandatory_specs"):
+        success = db.delete_spec(item_id)
+        label = "Prerequisite Spec"
+    elif target in ("experience", "experiences", "exp", "trap", "traps", "e"):
+        success = db.delete_experience(item_id)
+        label = "Experience"
+    elif target in ("pattern", "patterns", "golden_pattern", "golden_patterns", "pat", "p"):
+        success = db.delete_golden_pattern(item_id)
+        label = "Golden Pattern"
+    else:
+        return (
+            f"❌ Unknown item_type '{item_type}'. "
+            "Supported types: 'rule', 'spec', 'experience', 'pattern'."
+        )
+
+    if success:
+        return f"✅ {label} #{item_id} deleted successfully."
+    return f"❌ {label} #{item_id} not found."
+
+
+@server.tool()
+def brain_list_items(item_type: str = "rules", project: str = "all") -> str:
+    """
+    List stored records with their IDs, allowing inspection before deleting or updating.
+
+    Args:
+        item_type: Category to list ('rules', 'specs', 'experiences', 'patterns', or 'all')
+        project: Filter by project name or 'all' (default: 'all')
+    """
+    target = item_type.strip().lower()
+    p = project.strip().lower() if project else "all"
+    output_sections = []
+
+    if target in ("rule", "rules", "r", "all"):
+        rules = db.list_rules(project=p)
+        if rules:
+            lines = [f"### Rules (Project: '{p}'):"]
+            for r in rules:
+                lines.append(f"- [{r.id}] **[{r.severity}] ({r.project} / {r.category})**: {r.rule}")
+            output_sections.append("\n".join(lines))
+        elif target != "all":
+            output_sections.append(f"No rules found for project '{p}'.")
+
+    if target in ("spec", "specs", "s", "mandatory_spec", "all"):
+        specs = db.list_specs(project=p)
+        if specs:
+            lines = [f"### Prerequisite Specs (Project: '{p}'):"]
+            for s in specs:
+                lines.append(f"- [{s.id}] **({s.project})** Trigger: `{s.trigger_pattern}` -> File: `{s.spec_path}` ({s.instruction})")
+            output_sections.append("\n".join(lines))
+        elif target != "all":
+            output_sections.append(f"No prerequisite specs found for project '{p}'.")
+
+    if target in ("experience", "experiences", "exp", "trap", "traps", "e", "all"):
+        experiences = db.list_experiences(project=p)
+        if experiences:
+            lines = [f"### Experiences / Vaccines (Project: '{p}'):"]
+            for e in experiences:
+                lines.append(f"- [{e.id}] **({e.project} / {e.context})** [{e.recurrence_count}x]:\n  - Trap: {e.what_failed}\n  - Fix: {e.fix_applied}")
+            output_sections.append("\n".join(lines))
+        elif target != "all":
+            output_sections.append(f"No experiences found for project '{p}'.")
+
+    if target in ("pattern", "patterns", "golden_pattern", "golden_patterns", "pat", "p", "all"):
+        patterns = db.list_golden_patterns(project=p)
+        if patterns:
+            lines = [f"### Golden Patterns (Project: '{p}'):"]
+            for pat in patterns:
+                snippet_preview = pat.code_snippet[:60].replace("\n", " ")
+                lines.append(f"- [{pat.id}] **({pat.project} / {pat.context})** '{pat.title}': `{snippet_preview}...`")
+            output_sections.append("\n".join(lines))
+        elif target != "all":
+            output_sections.append(f"No golden patterns found for project '{p}'.")
+
+    if not output_sections:
+        if target == "all":
+            return f"No records found in database for project '{p}'."
+        return f"❌ Unknown item_type '{item_type}'. Supported types: 'rules', 'specs', 'experiences', 'patterns', 'all'."
+
+    return "\n\n".join(output_sections)
+
+
+@server.tool()
 def brain_list_rules(project: str = "global") -> str:
     """List all active rules for the given project including global rules."""
     rules = db.list_rules(project=project)

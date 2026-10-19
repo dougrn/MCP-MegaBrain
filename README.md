@@ -7,7 +7,7 @@
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-purple.svg)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![uv](https://img.shields.io/badge/managed%20by-uv-orange.svg)](https://github.com/astral-sh/uv)
-[![Tests](https://img.shields.io/badge/tests-13%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-15%20passed-brightgreen.svg)]()
 
 ---
 
@@ -100,6 +100,10 @@ uv run megabrain golden-pattern --title "PHP PDO UTF8MB4" --context "php mysql p
 
 # Consult MegaBrain (see what the AI receives!)
 uv run megabrain consult "php mysql query" --project my-app
+
+# List and delete obsolete records
+uv run megabrain list rules
+uv run megabrain delete rules 1
 ```
 
 ---
@@ -222,6 +226,7 @@ If the user says:
 | `megabrain record-experience`| Vaccinate against a repeated error | `megabrain record-experience -c "pdo" -f "..." -x "..."` |
 | `megabrain golden-pattern` | Save a battle-tested code snippet | `megabrain golden-pattern -t "Title" -c "tag" --code "..."` |
 | `megabrain list` | List stored memory by type | `megabrain list rules` / `megabrain list experiences` |
+| `megabrain delete` | Delete stored item by type and ID | `megabrain delete rules 1` / `megabrain delete exp 3` |
 | `megabrain stats` | Display memory overview & item counts | `megabrain stats` |
 | `megabrain contract` | Output the agent system instructions | `megabrain contract --raw` |
 | `megabrain serve` | Launch MCP server over stdio | `megabrain serve` |
@@ -233,7 +238,7 @@ If the user says:
 ```powershell
 uv run pytest
 ```
-All 13 test suites validate schema migrations, FTS5 full-text search, recurrence increments, and MCP tool executions.
+All 15 test suites validate schema migrations, FTS5 full-text search, recurrence increments, deletion operations, and MCP tool executions.
 
 ---
 
