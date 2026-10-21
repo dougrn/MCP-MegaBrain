@@ -40,6 +40,22 @@ STOPWORDS = {
 }
 
 
+def normalize_project(project: Optional[str]) -> str:
+    """
+    Normalize project identifiers.
+    Handles 'dougrn/ldg' -> 'ldg', 'C:\\path\\to\\LDG' -> 'ldg', 'LDG ' -> 'ldg'.
+    Defaults to 'global' if empty or None.
+    """
+    if not project or not project.strip():
+        return "global"
+    p = project.strip().lower()
+    if p in ("all", "global"):
+        return p
+    p = p.replace("\\", "/")
+    segments = [s for s in p.split("/") if s]
+    return segments[-1] if segments else "global"
+
+
 class MegaBrainDB:
     """Encapsulates all SQLite storage, FTS5 indexing, and consultation logic."""
 
@@ -222,7 +238,7 @@ class MegaBrainDB:
     def add_rule(self, rule: str, category: str = "general", project: str = "global", severity: str = "CRITICAL") -> Rule:
         """Add a new rule or constraint."""
         now = current_iso_time()
-        project = project.strip().lower() if project else "global"
+        project = normalize_project(project)
         with self.get_connection() as conn:
             cursor = conn.execute(
                 """
@@ -245,11 +261,12 @@ class MegaBrainDB:
         """List rules, optionally filtered by project or including global."""
         with self.get_connection() as conn:
             if project and project != "all":
-                p = project.strip().lower()
+                p = normalize_project(project)
+                raw = project.strip().lower()
                 rows = conn.execute(
                     """
                     SELECT * FROM rules 
-                    WHERE project = ? OR project = 'global'
+                    WHERE project = ? OR project = ? OR project = 'global'
                     ORDER BY 
                         CASE severity 
                             WHEN 'CRITICAL' THEN 1 
@@ -258,7 +275,7 @@ class MegaBrainDB:
                             ELSE 4 
                         END, id ASC
                     """,
-                    (p,),
+                    (p, raw),
                 ).fetchall()
             else:
                 rows = conn.execute("SELECT * FROM rules ORDER BY id ASC").fetchall()
@@ -277,7 +294,7 @@ class MegaBrainDB:
     def add_spec(self, spec_path: str, trigger_pattern: str, instruction: str = "", project: str = "global") -> MandatorySpec:
         """Register a specification that must be read before performing tasks matching trigger_pattern."""
         now = current_iso_time()
-        project = project.strip().lower() if project else "global"
+        project = normalize_project(project)
         instruction = instruction.strip() or f"You must read {spec_path} before generating code or plans."
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -300,10 +317,11 @@ class MegaBrainDB:
         """List mandatory specs."""
         with self.get_connection() as conn:
             if project and project != "all":
-                p = project.strip().lower()
+                p = normalize_project(project)
+                raw = project.strip().lower()
                 rows = conn.execute(
-                    "SELECT * FROM mandatory_specs WHERE project = ? OR project = 'global' ORDER BY id ASC",
-                    (p,),
+                    "SELECT * FROM mandatory_specs WHERE project = ? OR project = ? OR project = 'global' ORDER BY id ASC",
+                    (p, raw),
                 ).fetchall()
             else:
                 rows = conn.execute("SELECT * FROM mandatory_specs ORDER BY id ASC").fetchall()
@@ -329,7 +347,7 @@ class MegaBrainDB:
     ) -> GoldenPattern:
         """Save a battle-tested code snippet that the AI must follow."""
         now = current_iso_time()
-        project = project.strip().lower() if project else "global"
+        project = normalize_project(project)
         with self.get_connection() as conn:
             cursor = conn.execute(
                 """
@@ -352,10 +370,11 @@ class MegaBrainDB:
         """List all golden patterns."""
         with self.get_connection() as conn:
             if project and project != "all":
-                p = project.strip().lower()
+                p = normalize_project(project)
+                raw = project.strip().lower()
                 rows = conn.execute(
-                    "SELECT * FROM golden_patterns WHERE project = ? OR project = 'global' ORDER BY id ASC",
-                    (p,),
+                    "SELECT * FROM golden_patterns WHERE project = ? OR project = ? OR project = 'global' ORDER BY id ASC",
+                    (p, raw),
                 ).fetchall()
             else:
                 rows = conn.execute("SELECT * FROM golden_patterns ORDER BY id ASC").fetchall()
@@ -380,7 +399,7 @@ class MegaBrainDB:
     ) -> Experience:
         """Record a mistake/struggle and the working solution."""
         now = current_iso_time()
-        project = project.strip().lower() if project else "global"
+        project = normalize_project(project)
         ctx = context.strip().lower()
         failed = what_failed.strip()
         fix = fix_applied.strip()
@@ -433,10 +452,11 @@ class MegaBrainDB:
         """List recorded experiences."""
         with self.get_connection() as conn:
             if project and project != "all":
-                p = project.strip().lower()
+                p = normalize_project(project)
+                raw = project.strip().lower()
                 rows = conn.execute(
-                    "SELECT * FROM experiences WHERE project = ? OR project = 'global' ORDER BY recurrence_count DESC, id DESC",
-                    (p,),
+                    "SELECT * FROM experiences WHERE project = ? OR project = ? OR project = 'global' ORDER BY recurrence_count DESC, id DESC",
+                    (p, raw),
                 ).fetchall()
             else:
                 rows = conn.execute("SELECT * FROM experiences ORDER BY recurrence_count DESC, id DESC").fetchall()
@@ -466,7 +486,7 @@ class MegaBrainDB:
 
     def search_experiences(self, query: str, project: str = "global", limit: int = 5) -> list[Experience]:
         """Search experiences using FTS5 with column weights, project affinity, and adaptive relevance filtering."""
-        p = project.strip().lower() if project else "global"
+        p = normalize_project(project)
         fts_query = self._sanitize_fts_query(query)
         if not fts_query:
             return []
@@ -529,7 +549,7 @@ class MegaBrainDB:
 
     def search_golden_patterns(self, query: str, project: str = "global", limit: int = 3) -> list[GoldenPattern]:
         """Search golden patterns using weighted FTS5 and project affinity."""
-        p = project.strip().lower() if project else "global"
+        p = normalize_project(project)
         fts_query = self._sanitize_fts_query(query)
         if not fts_query:
             return []
@@ -596,7 +616,7 @@ class MegaBrainDB:
         for a task context into an actionable, authoritative guardrail prompt.
         If context_query is empty, 'all', or wildcard, returns all knowledge for the project.
         """
-        p = project.strip().lower() if project else "global"
+        p = normalize_project(project)
         rules = self.list_rules(p)
         all_specs = self.list_specs(p)
 
@@ -686,6 +706,13 @@ class MegaBrainDB:
 
         if not (rules or specs or experiences or patterns):
             lines.append("*(No specific anti-patterns or mandatory specs recorded for this context yet. Proceed following general best practices.)*\n")
+
+        lines.append(
+            "🔒 **AUTONOMOUS SELF-IMPROVEMENT MANDATE**:\n"
+            "If during this task you encounter ANY terminal error, syntax failure, TypeError, exception, or unexpected quirk and resolve it:\n"
+            "You MUST call `brain_record_experience(context='...', what_failed='...', fix_applied='...', project='...')` "
+            "BEFORE delivering your final response to the user. Do NOT wait to be asked. Persist the vaccine immediately!\n"
+        )
 
         return "\n".join(lines)
 

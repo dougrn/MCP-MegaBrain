@@ -110,3 +110,27 @@ def test_delete_operations(db):
 
     e = db.record_experience("ctx", "failed", "fix", project="test")
     assert db.delete_experience(e.id) is True
+
+
+def test_project_normalization_and_isolation(db):
+    from megabrain.db import normalize_project
+
+    assert normalize_project("dougrn/ldg") == "ldg"
+    assert normalize_project("c:\\users\\dougl\\desktop\\ldg") == "ldg"
+    assert normalize_project("global") == "global"
+    assert normalize_project("all") == "all"
+    assert normalize_project("") == "global"
+    assert normalize_project(None) == "global"
+
+    # Add rule to LDG with owner prefix
+    r = db.add_rule("LDG rule only", category="architecture", project="dougrn/ldg")
+    assert r.project == "ldg"
+
+    # LDG sees it
+    assert len(db.list_rules("ldg")) == 1
+    assert len(db.list_rules("dougrn/ldg")) == 1
+
+    # Unrelated project does NOT see it
+    assert len(db.list_rules("buscapjota")) == 0
+    res = db.consult(context_query="google places api", project="buscapjota")
+    assert "LDG rule only" not in res.formatted_prompt

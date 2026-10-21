@@ -34,7 +34,7 @@ def brain_consult(context: str = "", project: str = "global") -> str:
 
     Args:
         context: The topic, stack, or task description (e.g., 'php mysql pdo', 'react button design', 'authentication'). Leave empty or 'all' to load everything.
-        project: Project name/slug or 'global'
+        project: Identifier of the current project (e.g., 'ldg', 'casafleet', 'buscapjota'). Do not use 'global' if working inside a specific project.
     """
     result = db.consult(context_query=context, project=project)
     return result.formatted_prompt
@@ -51,7 +51,7 @@ def brain_load_project(project: str = "global") -> str:
     Returns all active rules, mandatory specifications, anti-patterns, and golden patterns for the project.
 
     Args:
-        project: Project identifier (e.g., 'ldg', 'ecommerce', or 'global')
+        project: Identifier of the current project (e.g., 'ldg', 'casafleet', 'buscapjota').
     """
     result = db.consult(context_query="all", project=project)
     return result.formatted_prompt
@@ -73,7 +73,7 @@ def brain_record_experience(
         context: Stack/domain keywords (e.g., 'php mysql utf8mb4', 'docker windows networking')
         what_failed: The anti-pattern or rookie mistake the AI made
         fix_applied: The exact working solution or insight that solved it
-        project: Project identifier or 'global'
+        project: Identifier of the current project (e.g., 'ldg', 'casafleet', 'buscapjota'). CRITICAL: Never use 'global' unless universally applicable to all software repositories.
         verified_snippet: (Optional) The working code block to also save as a Golden Pattern
     """
     exp = db.record_experience(
@@ -95,9 +95,10 @@ def brain_record_experience(
         )
         pattern_msg = f" Also created Golden Pattern #{pat.id} ('{pat.title}')."
 
+    scope_warn = " ⚠️ [Saved as 'global' - this will apply to ALL projects]" if exp.project == "global" else ""
     return (
-        f"✅ Experience recorded successfully [ID: {exp.id}, Recurrence: {exp.recurrence_count}x]. "
-        f"Trap '{what_failed[:40]}...' is now vaccinated for '{context}'.{pattern_msg}"
+        f"✅ Experience recorded successfully [ID: {exp.id}, Recurrence: {exp.recurrence_count}x, Project: '{exp.project}']. "
+        f"Trap '{what_failed[:40]}...' is now vaccinated for '{context}'.{pattern_msg}{scope_warn}"
     )
 
 
@@ -114,11 +115,12 @@ def brain_record_rule(
     Args:
         rule: The constraint statement (e.g., 'All code comments and docs must be in English')
         category: Category like 'language', 'architecture', 'security', 'git', 'style', 'general'
-        project: Project identifier or 'global'
+        project: Identifier of the current project (e.g., 'ldg', 'casafleet', 'buscapjota'). CRITICAL: Never use 'global' for project-specific rules, as 'global' rules are injected into every single repository!
         severity: 'CRITICAL', 'HIGH', 'MEDIUM', or 'LOW'
     """
     created = db.add_rule(rule=rule, category=category, project=project, severity=severity)
-    return f"✅ Rule registered [ID: {created.id}] for project '{created.project}': [{created.severity}] {created.rule}"
+    scope_warn = " ⚠️ [Saved as 'global' - this rule will be injected into ALL projects!]" if created.project == "global" else ""
+    return f"✅ Rule registered [ID: {created.id}] for project '{created.project}': [{created.severity}] {created.rule}{scope_warn}"
 
 
 @server.tool()
@@ -135,7 +137,7 @@ def brain_require_spec(
         spec_path: Path to spec file (e.g., 'specs/design-tokens.md', 'docs/api.md')
         trigger_pattern: Comma-separated keywords triggering this requirement (e.g., 'design, ui, layout, componentes')
         instruction: Directive for the agent (e.g., 'Read design tokens before generating CSS')
-        project: Project identifier or 'global'
+        project: Identifier of the current project (e.g., 'ldg', 'casafleet', 'buscapjota'). Do NOT use 'global' unless the spec file exists in all projects.
     """
     spec = db.add_spec(
         spec_path=spec_path,
@@ -165,7 +167,7 @@ def brain_record_golden_pattern(
         context: Stack/domain keywords (e.g., 'php mysql pdo')
         code_snippet: The exact verified working code
         explanation: Explanation of why this pattern is preferred
-        project: Project identifier or 'global'
+        project: Identifier of the current project (e.g., 'ldg', 'casafleet', 'buscapjota'). Do NOT use 'global' unless universally applicable.
     """
     pat = db.add_golden_pattern(
         title=title,
@@ -174,7 +176,7 @@ def brain_record_golden_pattern(
         explanation=explanation,
         project=project,
     )
-    return f"✅ Golden Pattern registered [ID: {pat.id}]: '{pat.title}' for context '{pat.context}'."
+    return f"✅ Golden Pattern registered [ID: {pat.id}]: '{pat.title}' for context '{pat.context}' (Project: '{pat.project}')."
 
 
 @server.tool()
